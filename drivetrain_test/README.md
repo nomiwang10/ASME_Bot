@@ -1,14 +1,14 @@
-# Drivetrain Motor Test
+# Four-Wheel Drivetrain Motor Test
 
-Initial test of one DC motor using an ESP32 and a BTS7960 motor driver.
-Control motor direction through the USB Serial Monitor.
+Tests four DC motors using one ESP32 and four BTS7960 motor drivers.
+USB Serial Monitor commands control all four motors together.
 
 ## Hardware
 
 - DOIT ESP32 DEVKIT V1
-- BTS7960 / IBT-2 motor driver
-- DC motor rated for the motor supply voltage
-- 12 V motor supply
+- Four BTS7960 / IBT-2 motor drivers, one per motor
+- Four DC motors rated for the motor supply voltage
+- 12 V motor supply capable of supplying all four motors
 - Regulated 5 V supply for driver logic
 - USB data cable
 
@@ -16,22 +16,41 @@ Control motor direction through the USB Serial Monitor.
 
 Turn off power before changing connections.
 
+### Power connections
+
+Apply these connections to each BTS7960:
+
 | Component / pin | Connect to |
 |---|---|
-| BTS7960 B+ | 12 V motor supply positive |
-| BTS7960 B− | Motor supply negative |
-| BTS7960 M+ / M− | Motor wires |
-| BTS7960 VCC | Regulated 5 V |
-| BTS7960 GND | Common ground |
-| BTS7960 R_EN / L_EN | Regulated 5 V |
-| BTS7960 RPWM | ESP32 GPIO25 |
-| BTS7960 LPWM | ESP32 GPIO26 |
-| BTS7960 R_IS / L_IS | Unconnected |
+| B+ | 12 V motor supply positive |
+| B− | Motor supply negative |
+| M+ / M− | Corresponding motor wires |
+| VCC | Regulated 5 V |
+| GND | Common ground |
+| R_EN / L_EN | Regulated 5 V, always enabled |
+| R_IS / L_IS | Unconnected |
 
-Connect ESP32 GND, driver GND, and supply negative together.
+Connect ESP32 GND, all driver grounds, and supply negative together.
 Route motor current directly through the power wiring.
 
-Confirm the specific driver module accepts 3.3 V control signals.
+Confirm each driver module accepts 3.3 V control signals.
+
+### ESP32 control pins
+
+Each motor uses two independent PWM outputs.
+
+| Wheel | LPWM GPIO | RPWM GPIO |
+|---|---|---|
+| Left front | GPIO13 | GPIO12 |
+| Right back | GPIO14 | GPIO27 |
+| Right front | GPIO26 | GPIO25 |
+| Left back | GPIO33 | GPIO32 |
+
+These numbers refer to GPIO numbers, not physical header positions.
+
+GPIO12 is a boot-strapping pin. If the ESP32 fails to boot with the
+drivers connected, check whether the driver is affecting that pin.
+An alternative is GPIO23; update both the wiring and code if changed.
 
 ### ESP32 power during testing
 
@@ -47,7 +66,7 @@ storage for motor startup.
 
 ## PlatformIO Setup
 
-Open this folder, `drivetrain_test`, in VS Code with PlatformIO.
+Open `drivetrain_test` in VS Code with PlatformIO.
 
 The project uses:
 
@@ -58,53 +77,103 @@ The project uses:
 - PWM resolution: 8 bits
 - Test duty cycle: 64/255, approximately 25%
 
-PlatformIO normally detects the COM port automatically.
-If needed, set the correct ports in `platformio.ini`:
+Example `platformio.ini`:
 
-    upload_port = COM5
-    monitor_port = COM5
+```ini
+[env:esp32doit-devkit-v1]
+platform = espressif32
+board = esp32doit-devkit-v1
+framework = arduino
+monitor_speed = 115200
+```
+
+PlatformIO normally detects the COM port automatically.
+If necessary, add:
+
+```ini
+upload_port = COM5
+monitor_port = COM5
+```
 
 Replace COM5 with the port assigned to your ESP32.
 
 ## Testing
 
-1. Lift the wheels clear of the ground.
+1. Lift all four wheels clear of the ground.
 2. Verify wiring and power connections.
 3. Build and upload the project.
 4. Open the PlatformIO Serial Monitor at 115200 baud.
 5. Send one of the commands below.
 
-| Command | Action |
+| Command | Action on all four drivers |
 |---|---|
-| f | Forward at approximately 25% duty |
-| r | Reverse at approximately 25% duty |
-| s | Stop using electrical braking |
+| `f` | RPWM at approximately 25% duty; LPWM LOW |
+| `r` | LPWM at approximately 25% duty; RPWM LOW |
+| `s` | Both PWM inputs LOW; electrical braking |
 
 Press Enter after typing a command if needed.
+Commands are lowercase.
 
-The motor continues running until another command is received.
-Direction changes include a one-second stop interval.
-Wait until the motor has physically stopped before reversing.
+The motors continue running until another command is received.
+Each `f` or `r` command first stops all motors for one second.
+Wait until the wheels have physically stopped before reversing.
 
-“Forward” depends on the motor wire orientation.
+The current code uses a blocking delay during this one-second interval,
+so serial commands are not processed until the interval finishes.
+
+The same electrical command is applied to every driver.
+Physical rotation depends on motor wiring and mounting.
+These commands do not yet represent coordinated robot forward,
+reverse, turning, or sideways movement.
+
 PWM duty cycle is not a measurement of actual motor speed.
+
+## Changing Test Power
+
+The initial duty cycle is defined in `src/main.cpp`:
+
+```cpp
+constexpr int TEST_DUTY = 64;
+```
+
+With 8-bit PWM, the range is 0–255:
+
+| Value | Approximate duty cycle |
+|---|---|
+| 0 | 0% |
+| 64 | 25% |
+| 128 | 50% |
+| 191 | 75% |
+| 255 | 100% |
+
+Stop the test if a motor hums without turning.
 
 ## Troubleshooting
 
 - No serial output: check the COM port, baud rate, and USB data cable.
-- Motor does not turn: check motor power, common ground, and enable pins.
-- Motor hums without turning: stop the test and check for a stall or
+  Press the ESP32 reset button to display the startup message again.
+- One motor does not turn: check that driver's power, enable pins,
+  PWM wiring, and motor connections.
+- No motors turn: check the shared power supply, common ground,
+  and that the uploaded program is running.
+- Motor hums without turning: stop and check for a stall or
   insufficient starting torque.
-- ESP32 resets: check supply voltage, wiring, noise, and decoupling.
-- Direction is reversed: power off and swap the motor wires, or update
-  the direction mapping in software.
+- ESP32 resets when motors start: check supply voltage, power wiring,
+  noise, and decoupling.
+- ESP32 does not boot: investigate GPIO12 and its boot-strapping role.
+- Wheels rotate in different physical directions: this can result
+  from mirrored mounting or motor wiring. Direction calibration
+  is not implemented yet.
 
 ## Current Limitations
 
-- Tests one motor only.
+- All four motors receive the same duty cycle and direction command.
+- No individual wheel commands or direction calibration.
+- No coordinated omni-wheel movement.
 - No encoder feedback or closed-loop speed control.
 - No automatic stop on loss of the serial connection.
 - Enable pins are permanently HIGH.
+- Stop commands are delayed during the one-second blocking interval.
 - Intended for supervised bench testing.
 
 ## Team Contributions
