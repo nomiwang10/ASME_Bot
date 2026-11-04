@@ -5,6 +5,7 @@ Shared repository for the ASME robot’s software, electronics, and documentatio
 ## Repository structure
 
 - `drivetrain_test/`: PlatformIO project for initial ESP32 and BTS7960 motor testing.
+- `rc_drive/`: ELRS receiver (CRSF) remote control of the four-motor drivetrain.
 - Add folders for other subsystems as they are developed.
 
 ## How each subsystem should use this repository
