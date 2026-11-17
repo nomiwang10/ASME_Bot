@@ -128,6 +128,45 @@ reverse, turning, or sideways movement.
 
 PWM duty cycle is not a measurement of actual motor speed.
 
+## Controller Input Test
+
+Checks that the T8L controller's input reaches the ESP32 through the
+ELRS receiver (receiver TX → GPIO16, plus 5V and GND).
+The controller is only logged; it does not drive the motors.
+
+1. Turn on the T8L (throttle down, Power only) and wait for two beeps.
+2. Power the ESP32. The receiver LED should be solid (bound and connected).
+3. Upload the project with the PlatformIO **Upload** (→) button.
+   If upload fails with "Failed to start stub flasher", add
+   `upload_speed = 115200` to `platformio.ini`.
+4. Open the Serial Monitor with the PlatformIO **plug** icon in the bottom bar,
+   or from a terminal:
+
+   ```bash
+   ~/.platformio/penv/bin/pio device monitor -p /dev/ttyUSB0 -b 115200
+   ```
+
+5. Press the ESP32 reset (EN) button to see the startup message.
+
+Every 200 ms the program prints one line:
+
+```
+link=1 frames=2743 | ch1= 992 ch2= 992 ch3= 174 ch4= 992 ch5=1792 ...
+```
+
+- `link=1` means channel data is arriving; `link=0` means none in the last 250 ms.
+- `frames` counts valid packets and should keep increasing.
+- Channel values range from about 172 to 1811, with 992 at center.
+  Move each stick and switch and check that a channel changes.
+
+Close the Serial Monitor before uploading again; only one program
+can use the port at a time.
+
+If `link=0`, check the receiver LED. A slow blink means it is not bound:
+power-cycle the receiver three times (about 1 s on, 2 s off), and when
+the LED double-blinks, hold **M** on the T8L for about 1 s.
+If the LED is solid but `link=0`, check the TX → GPIO16 wire and ground.
+
 ## Changing Test Power
 
 The initial duty cycle is defined in `src/main.cpp`:
